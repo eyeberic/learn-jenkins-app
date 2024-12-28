@@ -32,8 +32,8 @@ pipeline {
 					}
 					steps {
 						sh '''
-		    			ls -la
-			 				test -f build/index.html
+							ls -la
+							test -f build/index.html
 							npm test
 						'''
 					}
@@ -53,7 +53,7 @@ pipeline {
 					}
 					steps {
 						sh '''
-							npm install serve
+							npm install server
 			 				node_modules/.bin/server -s build $
 							sleep 10
 							npx playwright test --reporter=html
