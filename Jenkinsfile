@@ -11,13 +11,13 @@ pipeline {
 			}
 			steps {
 				sh '''
-    					ls -la
+					ls -la
 	 				node --version
-      					npm --version
-	   				npm ci
+					npm --version
+					npm ci
 					npm run build
-     					ls -la
-    				'''
+					ls -la
+				'''
 			}
 		}
 		
@@ -32,10 +32,10 @@ pipeline {
 					}
 					steps {
 						sh '''
-		    					ls -la
+		    			ls -la
 			 				test -f build/index.html
-		      					npm test
-		    				'''
+							npm test
+						'''
 					}
 					post {
 						always {
@@ -53,11 +53,11 @@ pipeline {
 					}
 					steps {
 						sh '''
-		    					npm install serve
+							npm install serve
 			 				node_modules/.bin/server -s build $
-		      					sleep 10
-		      					npx playwright test --reporter=html
-		    				'''
+							sleep 10
+							npx playwright test --reporter=html
+						'''
 					}
 					post {
 						always {
@@ -65,8 +65,8 @@ pipeline {
 						}
 					}
 				}
-			}
 			
+			}
 		}
 	}
 }
