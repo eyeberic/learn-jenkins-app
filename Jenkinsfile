@@ -83,13 +83,45 @@ pipeline {
             }
             steps {
                 sh '''
-                    npm install netlify-cli
+                    npm install netlify-cli node-jq
                     alias netlify=node_modules/.bin/netlify
+                    alias jq=node_modules/.bin/node-jq
                     netlify --version
                     echo "${STAGE_NAME} - Site ID: ${NETLIFY_SITE_ID}"
                     netlify status
-                    netlify deploy --dir=build
+                    netlify deploy --dir=build --json > deploy-output.json
                 '''
+                script {
+                    env.STAGING_URL = script(sh: "jq -r '.deploy_url' deploy-output.json", returnStdout: true)
+                }
+            }
+        }
+
+        stage('Staging Test') {
+            parallel {
+                stage('E2E Test') {
+                    agent {
+                        docker {
+                            image 'mcr.microsoft.com/playwright:v1.49.1-noble'
+                            reuseNode true
+                        }
+                    }
+
+                    environment {
+                        CI_ENVIRONMENT_URL = "${env.STAGING_URL}"
+                    }
+
+                    steps {
+                        sh '''
+                            npx playwright test --reporter=html
+                        '''
+                    }
+                    post {
+                        always {
+                            publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'playwright-report', reportFiles: 'index.html', reportName: 'Playwright Staging Test Report', reportTitles: '', useWrapperFileDirectly: true])
+                        }
+                    }
+                }
             }
         }
 
