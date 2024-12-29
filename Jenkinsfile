@@ -75,29 +75,6 @@ pipeline {
         }
 
         stage('Deploy staging') {
-            agent {
-                docker {
-                    image 'node:18-alpine'
-                    reuseNode true
-                }
-            }
-            steps {
-                sh '''
-                    npm install netlify-cli node-jq
-                    alias netlify=node_modules/.bin/netlify
-                    alias jq=node_modules/.bin/node-jq
-                    netlify --version
-                    echo "${STAGE_NAME} - Site ID: ${NETLIFY_SITE_ID}"
-                    netlify status
-                    netlify deploy --dir=build --json > deploy-output.json
-                '''
-                script {
-                    env.STAGING_URL = script(sh: "jq -r '.deploy_url' deploy-output.json", returnStdout: true)
-                }
-            }
-        }
-
-        stage('Staging Test') {
             parallel {
                 stage('E2E Test') {
                     agent {
@@ -107,12 +84,17 @@ pipeline {
                         }
                     }
 
-                    environment {
-                        CI_ENVIRONMENT_URL = "${env.STAGING_URL}"
-                    }
-
                     steps {
                         sh '''
+                            npm install netlify-cli node-jq
+                            alias netlify=node_modules/.bin/netlify
+                            alias jq=node_modules/.bin/node-jq
+                            netlify --version
+                            echo "${STAGE_NAME} - Site ID: ${NETLIFY_SITE_ID}"
+                            netlify status
+                            netlify deploy --dir=build --json > deploy-output.json
+                            sleep 10
+                            export CI_ENVIRONMENT_URL=$(jq -r '.deploy_url' deploy-output.json)
                             npx playwright test --reporter=html
                         '''
                     }
@@ -136,10 +118,15 @@ pipeline {
         stage('Deploy prod') {
             agent {
                 docker {
-                    image 'node:18-alpine'
+                    image 'mcr.microsoft.com/playwright:v1.49.1-noble'
                     reuseNode true
                 }
             }
+
+            environment {
+                CI_ENVIRONMENT_URL = 'https://peaceful-daffodil-303af5.netlify.app'
+            }
+
             steps {
                 sh '''
                     npm install netlify-cli
@@ -148,34 +135,13 @@ pipeline {
                     echo "${STAGE_NAME} - Site ID: ${NETLIFY_SITE_ID}"
                     netlify status
                     netlify deploy --dir=build --prod
+                    sleep 10
+                    npx playwright test --reporter=html
                 '''
             }
-        }
-
-        stage('Prod Test') {
-            parallel {
-                stage('E2E Test') {
-                    agent {
-                        docker {
-                            image 'mcr.microsoft.com/playwright:v1.49.1-noble'
-                            reuseNode true
-                        }
-                    }
-
-                    environment {
-                        CI_ENVIRONMENT_URL = 'https://peaceful-daffodil-303af5.netlify.app'
-                    }
-
-                    steps {
-                        sh '''
-                            npx playwright test --reporter=html
-                        '''
-                    }
-                    post {
-                        always {
-                            publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'playwright-report', reportFiles: 'index.html', reportName: 'Playwright Prod Test Report', reportTitles: '', useWrapperFileDirectly: true])
-                        }
-                    }
+            post {
+                always {
+                    publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'playwright-report', reportFiles: 'index.html', reportName: 'Playwright Prod Test Report', reportTitles: '', useWrapperFileDirectly: true])
                 }
             }
         }
