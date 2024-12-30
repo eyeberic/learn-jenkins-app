@@ -10,6 +10,9 @@ pipeline {
 
     stages {
         stage('AWS') {
+            environment {
+                AWS_DEFAULT_REGION = 'us-west-2'
+            }
             agent {
                 docker {
                     image 'amazon/aws-cli'
@@ -17,7 +20,12 @@ pipeline {
                 }
             }
             steps{
-                sh 'aws --version'
+                withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
+                    sh '''
+                        aws --version
+                        aws s3 ls
+                    '''
+                }
             }
         }
 
