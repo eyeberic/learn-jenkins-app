@@ -59,7 +59,7 @@ pipeline {
                 stage('E2E tests') {
                     agent {
                         docker {
-                            image 'mcr.microsoft.com/playwright:v1.49.1-noble'
+                            image 'my-playwright'
                             reuseNode true
                         }
                     }
@@ -86,16 +86,14 @@ pipeline {
                 stage('E2E Test') {
                     agent {
                         docker {
-                            image 'mcr.microsoft.com/playwright:v1.49.1-noble'
+                            image 'my-playwright'
                             reuseNode true
                         }
                     }
 
                     steps {
                         sh '''
-                            npm install netlify-cli node-jq
-                            alias netlify=node_modules/.bin/netlify
-                            alias jq=node_modules/.bin/node-jq
+                            alias jq=node-jq
                             netlify --version
                             echo "${STAGE_NAME} - Site ID: ${NETLIFY_SITE_ID}"
                             netlify status
@@ -117,7 +115,7 @@ pipeline {
         stage('Deploy prod') {
             agent {
                 docker {
-                    image 'mcr.microsoft.com/playwright:v1.49.1-noble'
+                    image 'my-playwright'
                     reuseNode true
                 }
             }
@@ -128,8 +126,6 @@ pipeline {
 
             steps {
                 sh '''
-                    npm install netlify-cli
-                    alias netlify=node_modules/.bin/netlify
                     netlify --version
                     echo "${STAGE_NAME} - Site ID: ${NETLIFY_SITE_ID}"
                     netlify status
