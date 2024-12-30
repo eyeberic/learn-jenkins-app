@@ -2,6 +2,7 @@ pipeline {
     agent any
     parameters {
         booleanParam(name: 'skip_netlify', defaultValue: true, description: 'Set to true to skip the stages with Netlify')
+        booleanParam(name: 'skip_aws', defaultValue: true, description: 'Set to true to skip the stages with AWS')
     }
 
     environment {
@@ -139,6 +140,11 @@ pipeline {
         }
 
         stage('Deploy to AWS S3 Bucket Site') {
+            when {
+                expression {
+                    params.skip_aws != true 
+                }
+            }
             agent {
                 docker {
                     image "$CUSTOM_DOCKER_IMAGE"
@@ -162,6 +168,11 @@ pipeline {
         }
 
         stage('Deploy to AWS ECS') {
+            when {
+                expression {
+                    params.skip_aws != true 
+                }
+            }
             agent {
                 docker {
                     image "$CUSTOM_DOCKER_IMAGE"
@@ -171,12 +182,20 @@ pipeline {
             environment {
                 AWS_S3_BUCKET = 'learn-jenkins-202412290002'
                 CI_ENVIRONMENT_URL = "http://$AWS_S3_BUCKET.s3-website-us-east-1.amazonaws.com"
+                MY_APP_NAME = "LearnJenkinsApp"
+                MY_APP_ENV = "Prod"
+                AWS_ECS_CLUSTER = "$MY_APP_NAME-Cluster-$MY_APP_ENV"
+                AWS_ECS_TASKDEF = "$MY_APP_NAME-TaskDefinition-$MY_APP_ENV"
+                AWS_ECS_SERVICE = "$MY_APP_NAME-Service-$MY_APP_ENV"
             }
             steps{
                 withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
                     sh '''
                         aws --version
-                        aws ecs register-task-definition --cli-input-json file://task-definition-prod.json
+                        LATEST_TD_REVISION = $(aws ecs register-task-definition --cli-input-json file://task-definition-prod.json | jq '.taskDefinition.revision')
+                        echo "Latest taskDefition is: ${LATEST_TD_REVISION}"
+                        aws ecs update-service --cluster $AWS_ECS_CLUSTER --service $AWS_ECS_SERVICE --task-definition "${AWS_ECS_TASKDEF}:${LATEST_TD_REVISION}"
+                        aws ecs wait services-stable --cluster $AWS_ECS_CLUSTER --services $AWS_ECS_SERVICE
                     '''
                 }
             }
