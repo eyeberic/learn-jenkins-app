@@ -2,6 +2,7 @@ pipeline {
     agent any
 
     environment {
+        CUSTOM_DOCKER_IMAGE = 'my-playwright'
         NETLIFY_SITE_ID = '03d4042d-476c-4668-9ce8-34352dad73e4'
         NETLIFY_AUTH_TOKEN = credentials('netlify-token')
         REACT_APP_VERSION = "1.0.$BUILD_VERSION"
@@ -10,14 +11,14 @@ pipeline {
     stages {
         stage('Build Docker image') {
             steps {
-                sh 'docker build -t my-playwright .'
+                sh "docker build -t $CUSTOM_DOCKER_IMAGE ."
             }
         }
 
         stage('Build App') {
             agent {
                 docker {
-                    image 'my-playwright'
+                    image "$CUSTOM_DOCKER_IMAGE"
                     reuseNode true
                 }
             }
@@ -38,7 +39,7 @@ pipeline {
                 stage('Unit tests') {
                     agent {
                         docker {
-                            image 'node:18-alpine'
+                            image "$CUSTOM_DOCKER_IMAGE"
                             reuseNode true
                         }
                     }
@@ -55,11 +56,10 @@ pipeline {
                         }
                     }
                 }
-                
                 stage('E2E tests') {
                     agent {
                         docker {
-                            image 'my-playwright'
+                            image "$CUSTOM_DOCKER_IMAGE"
                             reuseNode true
                         }
                     }
@@ -76,37 +76,31 @@ pipeline {
                         }
                     }
                 }
-            
             }
         }
 
         stage('Deploy staging') {
-            parallel {
-                stage('E2E Test') {
-                    agent {
-                        docker {
-                            image 'my-playwright'
-                            reuseNode true
-                        }
-                    }
-
-                    steps {
-                        sh '''
-                            alias jq=node-jq
-                            netlify --version
-                            echo "${STAGE_NAME} - Site ID: ${NETLIFY_SITE_ID}"
-                            netlify status
-                            netlify deploy --dir=build --json > deploy-output.json
-                            sleep 10
-                            export CI_ENVIRONMENT_URL=$(jq -r '.deploy_url' deploy-output.json)
-                            npx playwright test --reporter=html
-                        '''
-                    }
-                    post {
-                        always {
-                            publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'playwright-report', reportFiles: 'index.html', reportName: 'Playwright Staging Test Report', reportTitles: '', useWrapperFileDirectly: true])
-                        }
-                    }
+            agent {
+                docker {
+                    image "$CUSTOM_DOCKER_IMAGE"
+                    reuseNode true
+                }
+            }
+            steps {
+                sh '''
+                    alias jq=node-jq
+                    netlify --version
+                    echo "${STAGE_NAME} - Site ID: ${NETLIFY_SITE_ID}"
+                    netlify status
+                    netlify deploy --dir=build --json > deploy-output.json
+                    sleep 10
+                    export CI_ENVIRONMENT_URL=$(jq -r '.deploy_url' deploy-output.json)
+                    npx playwright test --reporter=html
+                '''
+            }
+            post {
+                always {
+                    publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'playwright-report', reportFiles: 'index.html', reportName: 'Playwright Staging Test Report', reportTitles: '', useWrapperFileDirectly: true])
                 }
             }
         }
@@ -114,15 +108,13 @@ pipeline {
         stage('Deploy prod') {
             agent {
                 docker {
-                    image 'my-playwright'
+                    image "$CUSTOM_DOCKER_IMAGE"
                     reuseNode true
                 }
             }
-
             environment {
                 CI_ENVIRONMENT_URL = 'https://peaceful-daffodil-303af5.netlify.app'
             }
-
             steps {
                 sh '''
                     netlify --version
