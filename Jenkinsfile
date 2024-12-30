@@ -82,7 +82,6 @@ pipeline {
             }
             steps {
                 sh '''
-                    alias jq=node-jq
                     netlify --version
                     echo "${STAGE_NAME} - Site ID: ${NETLIFY_SITE_ID}"
                     netlify status
