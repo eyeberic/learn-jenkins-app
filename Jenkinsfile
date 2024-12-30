@@ -9,27 +9,6 @@ pipeline {
     }
 
     stages {
-        stage('AWS') {
-            agent {
-                docker {
-                    image 'amazon/aws-cli'
-                    args "--entrypoint=''"
-                }
-            }
-            environment {
-                AWS_S3_BUCKET = 'learn-jenkins-202412290002'
-            }
-            steps{
-                withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
-                    sh '''
-                        aws --version
-                        echo 'Hello from S3' > index.html
-                        aws s3 cp index.html s3://$AWS_S3_BUCKET/
-                    '''
-                }
-            }
-        }
-
         stage('Build App') {
             agent {
                 docker {
@@ -142,6 +121,30 @@ pipeline {
             post {
                 always {
                     publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'playwright-report', reportFiles: 'index.html', reportName: 'Playwright Prod Test Report', reportTitles: '', useWrapperFileDirectly: true])
+                }
+            }
+        }
+
+        stage('Deploy AWS') {
+            agent {
+                docker {
+                    image 'amazon/aws-cli'
+                    args "--entrypoint=''"
+                    reuseNode true
+                }
+            }
+            environment {
+                AWS_S3_BUCKET = 'learn-jenkins-202412290002'
+                CI_ENVIRONMENT_URL = "http://$AWS_S3_BUCKET.s3-website-us-east-1.amazonaws.com"
+            }
+            steps{
+                withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
+                    sh '''
+                        aws --version
+                        aws s3 sync build s3://$AWS_S3_BUCKET/
+                        sleep 10
+                        npx playwright test --reporter=html
+                    '''
                 }
             }
         }
