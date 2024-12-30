@@ -9,12 +9,6 @@ pipeline {
     }
 
     stages {
-        stage('Build Docker image') {
-            steps {
-                sh "docker build -t $CUSTOM_DOCKER_IMAGE ."
-            }
-        }
-
         stage('Build App') {
             agent {
                 docker {
