@@ -1,5 +1,8 @@
 pipeline {
     agent any
+    parameters {
+        booleanParam(name: 'skip_netlify', defaultValue: true, description: 'Set to true to skip the stages with Netlify')
+    }
 
     environment {
         CUSTOM_DOCKER_IMAGE = 'my-playwright'
@@ -73,7 +76,12 @@ pipeline {
             }
         }
 
-        stage('Deploy staging') {
+        stage('Deploy to staging on Netlify') {
+            when {
+                expression {
+                    params.skip_netlify != true 
+                }
+            }
             agent {
                 docker {
                     image "$CUSTOM_DOCKER_IMAGE"
@@ -98,7 +106,12 @@ pipeline {
             }
         }
 
-        stage('Deploy prod') {
+        stage('Deploy to prod on Netlify') {
+            when {
+                expression {
+                    params.skip_netlify != true 
+                }
+            }
             agent {
                 docker {
                     image "$CUSTOM_DOCKER_IMAGE"
@@ -125,11 +138,10 @@ pipeline {
             }
         }
 
-        stage('Deploy AWS') {
+        stage('Deploy to AWS S3 Bucket Site') {
             agent {
                 docker {
-                    image 'amazon/aws-cli'
-                    args "--entrypoint=''"
+                    image "$CUSTOM_DOCKER_IMAGE"
                     reuseNode true
                 }
             }
@@ -144,6 +156,27 @@ pipeline {
                         aws s3 sync build s3://$AWS_S3_BUCKET/
                         sleep 10
                         npx playwright test --reporter=html
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to AWS ECS') {
+            agent {
+                docker {
+                    image "$CUSTOM_DOCKER_IMAGE"
+                    reuseNode true
+                }
+            }
+            environment {
+                AWS_S3_BUCKET = 'learn-jenkins-202412290002'
+                CI_ENVIRONMENT_URL = "http://$AWS_S3_BUCKET.s3-website-us-east-1.amazonaws.com"
+            }
+            steps{
+                withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
+                    sh '''
+                        aws --version
+                        aws ecs register-task-definition --cli-input-json file://task-definition-prod.json
                     '''
                 }
             }
