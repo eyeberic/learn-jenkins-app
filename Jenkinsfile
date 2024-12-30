@@ -14,10 +14,10 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Build App') {
             agent {
                 docker {
-                    image 'node:18-alpine'
+                    image 'my-playwright'
                     reuseNode true
                 }
             }
