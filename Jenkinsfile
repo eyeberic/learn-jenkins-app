@@ -147,7 +147,8 @@ pipeline {
             }
             agent {
                 docker {
-                    image "$CUSTOM_DOCKER_IMAGE"
+                    image 'amazon/aws-cli'
+                    args '-u root --entrypoint=""'
                     reuseNode true
                 }
             }
@@ -175,7 +176,8 @@ pipeline {
             }
             agent {
                 docker {
-                    image "$CUSTOM_DOCKER_IMAGE"
+                    image 'amazon/aws-cli'
+                    args '-u root --entrypoint=""'
                     reuseNode true
                 }
             }
@@ -192,6 +194,7 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
                     sh '''
                         aws --version
+                        yum install jq -y
                         LATEST_TD_REVISION = $(aws ecs register-task-definition --cli-input-json file://task-definition-prod.json | jq '.taskDefinition.revision')
                         echo "Latest taskDefition is: ${LATEST_TD_REVISION}"
                         aws ecs update-service --cluster $AWS_ECS_CLUSTER --service $AWS_ECS_SERVICE --task-definition "${AWS_ECS_TASKDEF}:${LATEST_TD_REVISION}"
