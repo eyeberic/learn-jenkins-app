@@ -6,7 +6,10 @@ pipeline {
     }
 
     environment {
-        CUSTOM_DOCKER_IMAGE = 'my-playwright'
+        MY_APP_NAME = "LearnJenkinsApp"
+        MY_APP_ENV = "Prod"
+        CUSTOM_PLAYWRIGHT_IMAGE = 'my-playwright'
+        CUSTOM_APP_IMAGE = ''
         NETLIFY_SITE_ID = '03d4042d-476c-4668-9ce8-34352dad73e4'
         NETLIFY_AUTH_TOKEN = credentials('netlify-token')
         REACT_APP_VERSION = "1.0.$BUILD_VERSION"
@@ -16,7 +19,7 @@ pipeline {
         stage('Build App') {
             agent {
                 docker {
-                    image "$CUSTOM_DOCKER_IMAGE"
+                    image "$CUSTOM_PLAYWRIGHT_IMAGE"
                     reuseNode true
                 }
             }
@@ -37,7 +40,7 @@ pipeline {
                 stage('Unit tests') {
                     agent {
                         docker {
-                            image "$CUSTOM_DOCKER_IMAGE"
+                            image "$CUSTOM_PLAYWRIGHT_IMAGE"
                             reuseNode true
                         }
                     }
@@ -57,7 +60,7 @@ pipeline {
                 stage('E2E tests') {
                     agent {
                         docker {
-                            image "$CUSTOM_DOCKER_IMAGE"
+                            image "$CUSTOM_PLAYWRIGHT_IMAGE"
                             reuseNode true
                         }
                     }
@@ -85,7 +88,7 @@ pipeline {
             }
             agent {
                 docker {
-                    image "$CUSTOM_DOCKER_IMAGE"
+                    image "$CUSTOM_PLAYWRIGHT_IMAGE"
                     reuseNode true
                 }
             }
@@ -115,7 +118,7 @@ pipeline {
             }
             agent {
                 docker {
-                    image "$CUSTOM_DOCKER_IMAGE"
+                    image "$CUSTOM_PLAYWRIGHT_IMAGE"
                     reuseNode true
                 }
             }
@@ -139,6 +142,24 @@ pipeline {
             }
         }
 
+        stage('Build the Docker image for AWS') {
+            agent {
+                docker {
+                    image 'my-aws-cli'
+                    args '-u root -v /var/run/docker.sock:/var/run/docker.sock --entrypoint=""'
+                    reuseNode true
+                }
+            }
+            steps {
+                sh '''
+                    docker build -t $(echo $MY_APP_NAME | tr '[:upper:]' '[:lower:]') .
+                '''
+                script{
+                    env.CUSTOM_APP_IMAGE = sh(script: "echo $MY_APP_NAME | tr '[:upper:]' '[:lower:]'", returnStdout: true)
+                }
+            }
+        }
+
         stage('Deploy to AWS S3 Bucket Site') {
             when {
                 expression {
@@ -147,13 +168,35 @@ pipeline {
             }
             agent {
                 docker {
-                    image 'amazon/aws-cli'
-                    args '-u root --entrypoint=""'
+                    image "$CUSTOM_PLAYWRIGHT_IMAGE"
                     reuseNode true
                 }
             }
             environment {
-                AWS_S3_BUCKET = 'learn-jenkins-202412290002'
+                AWS_S3_BUCKET = "$MY_APP_NAME-202412290002"
+                CI_ENVIRONMENT_URL = "http://$AWS_S3_BUCKET.s3-website-us-east-1.amazonaws.com"
+            }
+            steps{
+                withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
+                    sh 'npx playwright test --reporter=html'
+                }
+            }
+        }
+
+        stage('Test the AWS S3 Bucket Site') {
+            when {
+                expression {
+                    params.skip_aws != true 
+                }
+            }
+            agent {
+                docker {
+                    image 'my-aws-cli'
+                    reuseNode true
+                }
+            }
+            environment {
+                AWS_S3_BUCKET = "$MY_APP_NAME-202412290002"
                 CI_ENVIRONMENT_URL = "http://$AWS_S3_BUCKET.s3-website-us-east-1.amazonaws.com"
             }
             steps{
@@ -176,16 +219,12 @@ pipeline {
             }
             agent {
                 docker {
-                    image 'amazon/aws-cli'
-                    args '-u root --entrypoint=""'
+                    image 'my-aws-cli'
+                    args '--entrypoint=""'
                     reuseNode true
                 }
             }
             environment {
-                AWS_S3_BUCKET = 'learn-jenkins-202412290002'
-                CI_ENVIRONMENT_URL = "http://$AWS_S3_BUCKET.s3-website-us-east-1.amazonaws.com"
-                MY_APP_NAME = "LearnJenkinsApp"
-                MY_APP_ENV = "Prod"
                 AWS_ECS_CLUSTER = "$MY_APP_NAME-Cluster-$MY_APP_ENV"
                 AWS_ECS_TASKDEF = "$MY_APP_NAME-TaskDefinition-$MY_APP_ENV"
                 AWS_ECS_SERVICE = "$MY_APP_NAME-Service-$MY_APP_ENV"
@@ -194,7 +233,6 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
                     sh '''
                         aws --version
-                        yum install jq -y
                         LATEST_TD_REVISION = $(aws ecs register-task-definition --cli-input-json file://task-definition-prod.json | jq '.taskDefinition.revision')
                         echo "Latest taskDefition is: ${LATEST_TD_REVISION}"
                         aws ecs update-service --cluster $AWS_ECS_CLUSTER --service $AWS_ECS_SERVICE --task-definition "${AWS_ECS_TASKDEF}:${LATEST_TD_REVISION}"
