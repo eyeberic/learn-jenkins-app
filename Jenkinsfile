@@ -13,6 +13,7 @@ pipeline {
         CUSTOM_AWS_IMAGE = 'my-aws-cli'
         NETLIFY_SITE_ID = '03d4042d-476c-4668-9ce8-34352dad73e4'
         NETLIFY_AUTH_TOKEN = credentials('netlify-token')
+        AWS_DEFAULT_REGION = 'us-east-1'
         AWS_DOCKER_REGISTRY = "654654281644.dkr.ecr.us-east-1.amazonaws.com"
         AWS_ECS_CLUSTER = "$MY_APP_NAME-cluster-$MY_APP_ENV"
         AWS_ECS_TASKDEF = "$MY_APP_NAME-taskdefinition-$MY_APP_ENV"
@@ -238,6 +239,7 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
                     sh '''
                         aws --version
+                        sed -i "s/#APP_VERSION#/$REACT_APP_VERSION/g" aws/task-definition-prod.json
                         LATEST_TD_REVISION = $(aws ecs register-task-definition --cli-input-json file://aws/task-definition-prod.json | jq '.taskDefinition.revision')
                         echo "Latest taskDefition is: ${LATEST_TD_REVISION}"
                         aws ecs update-service --cluster $AWS_ECS_CLUSTER --service $AWS_ECS_SERVICE --task-definition "${AWS_ECS_TASKDEF}:${LATEST_TD_REVISION}"
