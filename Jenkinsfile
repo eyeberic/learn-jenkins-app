@@ -6,10 +6,10 @@ pipeline {
     }
 
     environment {
-        MY_APP_NAME = "LearnJenkinsApp"
-        MY_APP_ENV = "Prod"
+        MY_APP_NAME = "learnjenkinsapp"
+        MY_APP_ENV = "prod"
         CUSTOM_PLAYWRIGHT_IMAGE = 'my-playwright'
-        CUSTOM_APP_IMAGE = ''
+        CUSTOM_AWS_IMAGE = 'my-aws-cli'
         NETLIFY_SITE_ID = '03d4042d-476c-4668-9ce8-34352dad73e4'
         NETLIFY_AUTH_TOKEN = credentials('netlify-token')
         REACT_APP_VERSION = "1.0.$BUILD_VERSION"
@@ -145,18 +145,13 @@ pipeline {
         stage('Build the Docker image for AWS') {
             agent {
                 docker {
-                    image 'my-aws-cli'
+                    image "$CUSTOM_AWS_IMAGE"
                     args '-u root -v /var/run/docker.sock:/var/run/docker.sock --entrypoint=""'
                     reuseNode true
                 }
             }
             steps {
-                sh '''
-                    docker build -t $(echo $MY_APP_NAME | tr '[:upper:]' '[:lower:]') .
-                '''
-                script{
-                    env.CUSTOM_APP_IMAGE = sh(script: "echo $MY_APP_NAME | tr '[:upper:]' '[:lower:]'", returnStdout: true)
-                }
+                sh "docker build -t $MY_APP_NAME:$REACT_APP_VERSION ."
             }
         }
 
@@ -191,7 +186,7 @@ pipeline {
             }
             agent {
                 docker {
-                    image 'my-aws-cli'
+                    image "$CUSTOM_AWS_IMAGE"
                     reuseNode true
                 }
             }
@@ -219,21 +214,21 @@ pipeline {
             }
             agent {
                 docker {
-                    image 'my-aws-cli'
+                    image "$CUSTOM_AWS_IMAGE"
                     args '--entrypoint=""'
                     reuseNode true
                 }
             }
             environment {
-                AWS_ECS_CLUSTER = "$MY_APP_NAME-Cluster-$MY_APP_ENV"
-                AWS_ECS_TASKDEF = "$MY_APP_NAME-TaskDefinition-$MY_APP_ENV"
-                AWS_ECS_SERVICE = "$MY_APP_NAME-Service-$MY_APP_ENV"
+                AWS_ECS_CLUSTER = "$MY_APP_NAME-cluster-$MY_APP_ENV"
+                AWS_ECS_TASKDEF = "$MY_APP_NAME-taskdefinition-$MY_APP_ENV"
+                AWS_ECS_SERVICE = "$MY_APP_NAME-service-$MY_APP_ENV"
             }
             steps{
                 withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
                     sh '''
                         aws --version
-                        LATEST_TD_REVISION = $(aws ecs register-task-definition --cli-input-json file://task-definition-prod.json | jq '.taskDefinition.revision')
+                        LATEST_TD_REVISION = $(aws ecs register-task-definition --cli-input-json file://aws/task-definition-prod.json | jq '.taskDefinition.revision')
                         echo "Latest taskDefition is: ${LATEST_TD_REVISION}"
                         aws ecs update-service --cluster $AWS_ECS_CLUSTER --service $AWS_ECS_SERVICE --task-definition "${AWS_ECS_TASKDEF}:${LATEST_TD_REVISION}"
                         aws ecs wait services-stable --cluster $AWS_ECS_CLUSTER --services $AWS_ECS_SERVICE
