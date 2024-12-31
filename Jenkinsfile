@@ -8,11 +8,15 @@ pipeline {
     environment {
         MY_APP_NAME = "learnjenkinsapp"
         MY_APP_ENV = "prod"
+        REACT_APP_VERSION = "1.0.$BUILD_VERSION"
         CUSTOM_PLAYWRIGHT_IMAGE = 'my-playwright'
         CUSTOM_AWS_IMAGE = 'my-aws-cli'
         NETLIFY_SITE_ID = '03d4042d-476c-4668-9ce8-34352dad73e4'
         NETLIFY_AUTH_TOKEN = credentials('netlify-token')
-        REACT_APP_VERSION = "1.0.$BUILD_VERSION"
+        AWS_DOCKER_REGISTRY = "654654281644.dkr.ecr.us-east-1.amazonaws.com"
+        AWS_ECS_CLUSTER = "$MY_APP_NAME-cluster-$MY_APP_ENV"
+        AWS_ECS_TASKDEF = "$MY_APP_NAME-taskdefinition-$MY_APP_ENV"
+        AWS_ECS_SERVICE = "$MY_APP_NAME-service-$MY_APP_ENV"
     }
 
     stages {
@@ -143,6 +147,11 @@ pipeline {
         }
 
         stage('Build the Docker image for AWS') {
+            when {
+                expression {
+                    params.skip_aws != true 
+                }
+            }
             agent {
                 docker {
                     image "$CUSTOM_AWS_IMAGE"
@@ -151,7 +160,13 @@ pipeline {
                 }
             }
             steps {
-                sh "docker build -t $MY_APP_NAME:$REACT_APP_VERSION ."
+                withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
+                    sh '''
+                        docker build -t $AWS_DOCKER_REGISTRY/$MY_APP_NAME:$REACT_APP_VERSION .
+                        aws ecr get-login-password | docker login --username AWS --password-stdin $AWS_DOCKER_REGISTRY
+                        docker push $AWS_DOCKER_REGISTRY/$MY_APP_NAME:$REACT_APP_VERSION
+                    '''
+                }
             }
         }
 
@@ -218,11 +233,6 @@ pipeline {
                     args '--entrypoint=""'
                     reuseNode true
                 }
-            }
-            environment {
-                AWS_ECS_CLUSTER = "$MY_APP_NAME-cluster-$MY_APP_ENV"
-                AWS_ECS_TASKDEF = "$MY_APP_NAME-taskdefinition-$MY_APP_ENV"
-                AWS_ECS_SERVICE = "$MY_APP_NAME-service-$MY_APP_ENV"
             }
             steps{
                 withCredentials([usernamePassword(credentialsId: 'my-aws-access', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
